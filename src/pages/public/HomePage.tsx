@@ -87,13 +87,13 @@ export const HomePage: React.FC<HomePageProps> = ({
       {/* 3-Step Learning Process */}
       <HowItWorks />
 
-      {/* Pricing Membership Tiers */}
+      {/* Pricing Membership Tiers
       <CourseComparisonTable
         onSelectPlan={() => navigate('/courses')}
-      />
+      /> */}
 
       {/* Student Work Showcase */}
-      <StudentProjectsGallery />
+      {/* <StudentProjectsGallery /> */}
 
       {/* Achievements Counter */}
       <StatsCounter />

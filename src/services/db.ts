@@ -390,7 +390,12 @@ export class DBService {
         return { success: true, user: existing };
       }
       // Upgrade role to TEACHER if code is valid
-      const updated = this.updateUser(existing.id, { role: 'TEACHER', phone, name });
+      const updated = this.updateUser(existing.id, {
+        role: 'TEACHER',
+        phone,
+        name,
+        passwordHash: password ? hashSecretSync(password) : existing.passwordHash,
+      });
       this.logAdminAction(existing.id, name, `Upgraded user to Teacher via access code`, 'Auth', existing.id);
       return { success: true, user: updated };
     }
@@ -401,6 +406,7 @@ export class DBService {
       phone,
       role: 'TEACHER',
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+      passwordHash: password ? hashSecretSync(password) : undefined,
     });
 
     this.logAdminAction(newTeacher.id, name, `Activated new Teacher account via access code`, 'Auth', newTeacher.id);

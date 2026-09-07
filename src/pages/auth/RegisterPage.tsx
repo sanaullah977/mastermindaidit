@@ -109,7 +109,7 @@ export const RegisterPage: React.FC = () => {
               <input
                 type="text"
                 required
-                placeholder="Tanvir Ahmed"
+                placeholder="Enter Your Number"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-4 py-3 bg-[#071325] border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -123,7 +123,7 @@ export const RegisterPage: React.FC = () => {
               <input
                 type="email"
                 required
-                placeholder="tanvir@example.com"
+                placeholder="Enter Your Mail Account"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 bg-[#071325] border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-brand-500"

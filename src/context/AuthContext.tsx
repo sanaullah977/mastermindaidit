@@ -34,6 +34,54 @@ interface AuthContextType {
   updateProfile: (updates: Partial<User>) => Promise<{ success: boolean; user?: User; error?: string }>;
 }
 
+export const isFirebaseSuspendedOrUnavailable = (err: any): boolean => {
+  if (!err) return false;
+  const code = typeof err.code === 'string' ? err.code.toLowerCase() : '';
+  const msg = typeof err.message === 'string' ? err.message.toLowerCase() : '';
+
+  return (
+    code === 'auth/permission-denied' ||
+    code === 'auth/api-key-not-valid' ||
+    code === 'auth/invalid-api-key' ||
+    code === 'auth/app-deleted' ||
+    code === 'auth/network-request-failed' ||
+    code === 'auth/internal-error' ||
+    msg.includes('suspended') ||
+    msg.includes('permission-denied') ||
+    msg.includes('permission denied') ||
+    msg.includes('consumer') ||
+    msg.includes('api-key') ||
+    msg.includes('api key') ||
+    msg.includes('billing')
+  );
+};
+
+export const formatAuthError = (err: any, fallbackMessage: string): string => {
+  if (!err) return fallbackMessage;
+  const code = typeof err.code === 'string' ? err.code : '';
+  const msg = typeof err.message === 'string' ? err.message : '';
+
+  if (isFirebaseSuspendedOrUnavailable(err)) {
+    return 'Firebase পরিষেবা সাময়িকভাবে অনুপলব্ধ। লোকাল প্ল্যাটফর্ম প্রমাণীকরণের মাধ্যমে প্রক্রিয়া সম্পন্ন করা হয়েছে।';
+  }
+  if (code === 'auth/email-already-in-use') {
+    return 'An account with this email already exists. Please log in.';
+  }
+  if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+    return 'Incorrect email or password, or the account does not exist. Please sign up or register first.';
+  }
+  if (code === 'auth/wrong-password') {
+    return 'Incorrect password. Please try again.';
+  }
+  if (code === 'auth/weak-password') {
+    return 'Password must be at least 6 characters long.';
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'Network connection failed. Please check your internet connection and try again.';
+  }
+  return msg || fallbackMessage;
+};
+
 const AUTH_SESSION_KEY = 'mastermind_auth_session_v3';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -138,8 +186,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(localUser);
         localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(localUser));
       } else {
-        // firebaseUser is null: check if we have a valid saved local session (e.g. seed admin)
-        if (storedSession && (storedSession.role === 'ADMIN' || storedSession.role === 'TEACHER')) {
+        // firebaseUser is null: check if we have a valid saved local session
+        if (storedSession) {
           const fresh = DBService.getUserById(storedSession.id) || DBService.getUserByEmail(storedSession.email);
           if (fresh && fresh.status !== 'SUSPENDED') {
             setCurrentUser(fresh);
@@ -176,9 +224,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
         firebaseUser = userCredential.user;
       } catch (fbErr: any) {
-        // If user not in Firebase but exists in DB with matching password hash, allow login
+        // Fallback to local DB check if user exists in DBService
         if (
-          (fbErr.code === 'auth/user-not-found' || fbErr.code === 'auth/invalid-credential') &&
           localUser &&
           localUser.passwordHash &&
           localUser.passwordHash === hashSecretSync(password)
@@ -195,6 +242,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsLoading(false);
           return { success: true, user: localUser };
         }
+
+        if (localUser && localUser.passwordHash && localUser.passwordHash !== hashSecretSync(password)) {
+          setIsLoading(false);
+          return { success: false, error: 'Incorrect password. Please try again.' };
+        }
+
+        if (isFirebaseSuspendedOrUnavailable(fbErr)) {
+          setIsLoading(false);
+          return {
+            success: false,
+            error: 'No account found with this email in the local system. Please register a new account.'
+          };
+        }
+
         throw fbErr;
       }
 
@@ -214,11 +275,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: cleanEmail,
           role,
           avatar: firebaseUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+          passwordHash: hashSecretSync(password),
         });
       }
 
       if (localUser.status === 'SUSPENDED') {
-        await signOut(auth);
+        await signOut(auth).catch(() => {});
         localStorage.removeItem(AUTH_SESSION_KEY);
         setIsLoading(false);
         return { success: false, error: 'Account suspended. Please contact platform support.' };
@@ -239,15 +301,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: true, user: localUser };
     } catch (e: any) {
       setIsLoading(false);
-      let errorMsg = 'An error occurred during sign in. Please try again.';
-      if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
-        errorMsg = 'Incorrect email or password, or the account does not exist. Please sign up or register first.';
-      } else if (e.code === 'auth/wrong-password') {
-        errorMsg = 'Incorrect password. Please try again.';
-      } else if (e.message) {
-        errorMsg = e.message;
-      }
-      return { success: false, error: errorMsg };
+      return { success: false, error: formatAuthError(e, 'An error occurred during sign in. Please try again.') };
     }
   };
 
@@ -266,9 +320,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
         firebaseUser = userCredential.user;
       } catch (fbErr: any) {
-        // Fallback to local DB check for newly admin-created teachers or seed accounts
+        // Fallback to local DB check for teachers
+        const isFallbackable =
+          isFirebaseSuspendedOrUnavailable(fbErr) ||
+          fbErr.code === 'auth/user-not-found' ||
+          fbErr.code === 'auth/invalid-credential' ||
+          fbErr.code === 'auth/wrong-password';
+
         if (
-          (fbErr.code === 'auth/user-not-found' || fbErr.code === 'auth/invalid-credential') &&
+          isFallbackable &&
           localUser &&
           localUser.passwordHash &&
           localUser.passwordHash === hashSecretSync(password)
@@ -292,6 +352,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsLoading(false);
           return result;
         }
+
+        if (isFirebaseSuspendedOrUnavailable(fbErr)) {
+          const result = DBService.authenticateTeacher(cleanEmail, password, teacherAccessCode);
+          setIsLoading(false);
+          return result;
+        }
+
         throw fbErr;
       }
 
@@ -306,7 +373,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (e) {}
 
       if (role !== 'TEACHER' && role !== 'ADMIN') {
-        await signOut(auth);
+        await signOut(auth).catch(() => {});
         localStorage.removeItem(AUTH_SESSION_KEY);
         setIsLoading(false);
         return { success: false, error: 'Unauthorized role. You are not a Teacher.' };
@@ -323,7 +390,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const result = DBService.authenticateTeacher(cleanEmail, password, teacherAccessCode);
       if (!result.success) {
-        await signOut(auth);
+        await signOut(auth).catch(() => {});
         localStorage.removeItem(AUTH_SESSION_KEY);
         setIsLoading(false);
         return result;
@@ -337,15 +404,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return result;
     } catch (e: any) {
       setIsLoading(false);
-      let errorMsg = 'An error occurred during teacher sign in. Please try again.';
-      if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
-        errorMsg = 'Incorrect email or password, or the account does not exist. Please sign up or register first.';
-      } else if (e.code === 'auth/wrong-password') {
-        errorMsg = 'Incorrect password. Please try again.';
-      } else if (e.message) {
-        errorMsg = e.message;
-      }
-      return { success: false, error: errorMsg };
+      return { success: false, error: formatAuthError(e, 'An error occurred during teacher sign in. Please try again.') };
     }
   };
 
@@ -365,8 +424,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         firebaseUser = userCredential.user;
       } catch (fbErr: any) {
         // Fallback to local DB check for seed admins or newly created admins
+        const isFallbackable =
+          isFirebaseSuspendedOrUnavailable(fbErr) ||
+          fbErr.code === 'auth/user-not-found' ||
+          fbErr.code === 'auth/invalid-credential' ||
+          fbErr.code === 'auth/wrong-password';
+
         if (
-          (fbErr.code === 'auth/user-not-found' || fbErr.code === 'auth/invalid-credential') &&
+          isFallbackable &&
           localUser &&
           localUser.passwordHash &&
           localUser.passwordHash === hashSecretSync(password)
@@ -391,6 +456,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsLoading(false);
           return result;
         }
+
+        if (isFirebaseSuspendedOrUnavailable(fbErr)) {
+          const result = DBService.authenticateAdmin(cleanEmail, password, adminSecurityCode);
+          setIsLoading(false);
+          return result;
+        }
+
         throw fbErr;
       }
 
@@ -405,7 +477,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (e) {}
 
       if (role !== 'ADMIN') {
-        await signOut(auth);
+        await signOut(auth).catch(() => {});
         localStorage.removeItem(AUTH_SESSION_KEY);
         setIsLoading(false);
         return { success: false, error: 'Unauthorized role. You are not an Admin.' };
@@ -422,7 +494,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const result = DBService.authenticateAdmin(cleanEmail, password, adminSecurityCode);
       if (!result.success) {
-        await signOut(auth);
+        await signOut(auth).catch(() => {});
         localStorage.removeItem(AUTH_SESSION_KEY);
         setIsLoading(false);
         return result;
@@ -436,15 +508,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return result;
     } catch (e: any) {
       setIsLoading(false);
-      let errorMsg = 'An error occurred during admin sign in. Please try again.';
-      if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
-        errorMsg = 'Incorrect email or password, or the account does not exist. Please sign up or register first.';
-      } else if (e.code === 'auth/wrong-password') {
-        errorMsg = 'Incorrect password. Please try again.';
-      } else if (e.message) {
-        errorMsg = e.message;
-      }
-      return { success: false, error: errorMsg };
+      return { success: false, error: formatAuthError(e, 'An error occurred during admin sign in. Please try again.') };
     }
   };
 
@@ -465,14 +529,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      const firebaseUser = userCredential.user;
+      let firebaseUser: any = null;
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        firebaseUser = userCredential.user;
 
-      const avatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80';
-      await firebaseUpdateProfile(firebaseUser, {
-        displayName: JSON.stringify({ name: cleanName, role: 'TEACHER' }),
-        photoURL: avatar
-      });
+        const avatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80';
+        await firebaseUpdateProfile(firebaseUser, {
+          displayName: JSON.stringify({ name: cleanName, role: 'TEACHER' }),
+          photoURL: avatar
+        }).catch(() => {});
+      } catch (fbErr: any) {
+        if (fbErr.code === 'auth/email-already-in-use') {
+          setIsLoading(false);
+          return { success: false, error: 'An account with this email already exists. Please log in.' };
+        }
+
+        if (isFirebaseSuspendedOrUnavailable(fbErr)) {
+          const result = DBService.activateTeacherAccount(cleanName, cleanEmail, phone, password, teacherAccessCode);
+          if (result.success && result.user) {
+            setCurrentUser(result.user);
+            localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(result.user));
+          }
+          setIsLoading(false);
+          return result;
+        }
+
+        throw fbErr;
+      }
 
       const result = DBService.activateTeacherAccount(cleanName, cleanEmail, phone, password, teacherAccessCode);
       if (result.success && result.user) {
@@ -483,13 +567,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return result;
     } catch (e: any) {
       setIsLoading(false);
-      let errorMsg = 'An error occurred during teacher activation. Please try again.';
-      if (e.code === 'auth/email-already-in-use') {
-        errorMsg = 'An account with this email already exists. Please log in.';
-      } else if (e.message) {
-        errorMsg = e.message;
-      }
-      return { success: false, error: errorMsg };
+      return { success: false, error: formatAuthError(e, 'An error occurred during teacher activation. Please try again.') };
     }
   };
 
@@ -529,22 +607,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Password must be at least 6 characters long.' };
     }
 
+    // Prevent duplicate registration if account exists in DBService
+    if (DBService.getUserByEmail(cleanEmail)) {
+      setIsLoading(false);
+      return { success: false, error: 'An account with this email already exists. Please log in.' };
+    }
+
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      const firebaseUser = userCredential.user;
+      let firebaseUser: any = null;
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        firebaseUser = userCredential.user;
+
+        const avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
+        await firebaseUpdateProfile(firebaseUser, {
+          displayName: JSON.stringify({ name: cleanName, role }),
+          photoURL: avatar
+        }).catch(() => {});
+      } catch (fbErr: any) {
+        if (fbErr.code === 'auth/email-already-in-use') {
+          setIsLoading(false);
+          return { success: false, error: 'An account with this email already exists. Please log in.' };
+        }
+
+        // Graceful fallback to DBService when Firebase is suspended / offline
+        if (isFirebaseSuspendedOrUnavailable(fbErr)) {
+          const avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
+          const newUser = DBService.createUser({
+            name: cleanName,
+            email: cleanEmail,
+            role,
+            avatar,
+            passwordHash: hashSecretSync(password),
+          });
+
+          setCurrentUser(newUser);
+          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(newUser));
+          setIsLoading(false);
+          return { success: true, user: newUser };
+        }
+
+        throw fbErr;
+      }
 
       const avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
-      await firebaseUpdateProfile(firebaseUser, {
-        displayName: JSON.stringify({ name: cleanName, role }),
-        photoURL: avatar
-      });
-
       const newUser = DBService.createUser({
         name: cleanName,
         email: cleanEmail,
         role,
         avatar,
-        passwordHash: password ? hashSecretSync(password) : undefined,
+        passwordHash: hashSecretSync(password),
       });
 
       setCurrentUser(newUser);
@@ -553,13 +665,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: true, user: newUser };
     } catch (e: any) {
       setIsLoading(false);
-      let errorMsg = 'An error occurred during registration. Please try again.';
-      if (e.code === 'auth/email-already-in-use') {
-        errorMsg = 'An account with this email already exists. Please log in.';
-      } else if (e.message) {
-        errorMsg = e.message;
-      }
-      return { success: false, error: errorMsg };
+      return { success: false, error: formatAuthError(e, 'An error occurred during registration. Please try again.') };
     }
   };
 
@@ -601,16 +707,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Invalid admin security code. Registration rejected.' };
     }
 
+    if (DBService.getUserByEmail(cleanEmail)) {
+      setIsLoading(false);
+      return { success: false, error: 'An account with this email already exists. Please log in.' };
+    }
+
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      const firebaseUser = userCredential.user;
+      let firebaseUser: any = null;
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        firebaseUser = userCredential.user;
+
+        const avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
+        await firebaseUpdateProfile(firebaseUser, {
+          displayName: JSON.stringify({ name: cleanName, role: 'ADMIN' }),
+          photoURL: avatar
+        }).catch(() => {});
+      } catch (fbErr: any) {
+        if (fbErr.code === 'auth/email-already-in-use') {
+          setIsLoading(false);
+          return { success: false, error: 'An account with this email already exists. Please log in.' };
+        }
+
+        // Graceful fallback to DBService when Firebase is suspended / offline
+        if (isFirebaseSuspendedOrUnavailable(fbErr)) {
+          const avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
+          const newUser = DBService.createUser({
+            name: cleanName,
+            email: cleanEmail,
+            role: 'ADMIN',
+            avatar,
+            passwordHash: hashSecretSync(password),
+          });
+
+          setCurrentUser(newUser);
+          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(newUser));
+          setIsLoading(false);
+          return { success: true, user: newUser };
+        }
+
+        throw fbErr;
+      }
 
       const avatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
-      await firebaseUpdateProfile(firebaseUser, {
-        displayName: JSON.stringify({ name: cleanName, role: 'ADMIN' }),
-        photoURL: avatar
-      });
-
       const newUser = DBService.createUser({
         name: cleanName,
         email: cleanEmail,
@@ -625,13 +764,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: true, user: newUser };
     } catch (e: any) {
       setIsLoading(false);
-      let errorMsg = 'An error occurred during admin registration. Please try again.';
-      if (e.code === 'auth/email-already-in-use') {
-        errorMsg = 'An account with this email already exists. Please log in.';
-      } else if (e.message) {
-        errorMsg = e.message;
-      }
-      return { success: false, error: errorMsg };
+      return { success: false, error: formatAuthError(e, 'An error occurred during admin registration. Please try again.') };
     }
   };
 
@@ -666,6 +799,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         message: 'Password reset email sent successfully. Please check your inbox and spam folder.',
       };
     } catch (e: any) {
+      if (isFirebaseSuspendedOrUnavailable(e)) {
+        const localUser = DBService.getUserByEmail(cleanEmail);
+        if (localUser) {
+          return {
+            success: true,
+            message: 'পাসওয়ার্ড রিসেট রিকোয়েস্ট সফলভাবে গৃহীত হয়েছে। ফায়ারবেস সার্ভিস সাময়িকভাবে স্থগিত থাকায় আপনি সরাসরি পাসওয়ার্ড পরিবর্তন পেজ (/reset-password) থেকে নতুন পাসওয়ার্ড সেট করে নিতে পারেন।',
+          };
+        } else {
+          return {
+            success: false,
+            message: 'এই ইমেইলে কোনো অ্যাকাউন্ট পাওয়া যায়নি। (No account was found with this email.)',
+          };
+        }
+      }
+
       let errorMsg = 'Something went wrong. Please try again later.';
       if (e.code === 'auth/user-not-found') {
         errorMsg = 'No account was found with this email.';

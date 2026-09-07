@@ -169,7 +169,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ presetRole }) => {
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md relative z-10 space-y-4">
         
         {/* Top Auth Mode Switcher (Sign In vs Sign Up) */}
-        <div className="bg-[#071325] p-1.5 rounded-2xl border border-brand-500/30 flex text-xs font-black shadow-lg">
+        {/* <div className="bg-[#071325] p-1.5 rounded-2xl border border-brand-500/30 flex text-xs font-black shadow-lg">
           <div className="flex-1 py-2.5 rounded-xl bg-brand-500 text-white shadow-md flex items-center justify-center gap-1.5">
             <UserCheck className="w-4 h-4" />
             <span>Sign In</span>
@@ -181,7 +181,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ presetRole }) => {
             <UserPlus className="w-4 h-4 text-brand-400" />
             <span>Sign Up (New User) →</span>
           </Link>
-        </div>
+        </div> */}
 
         {/* Role Selector Tabs */}
         <div className="bg-[#071325] p-1.5 rounded-2xl border border-slate-800 grid grid-cols-3 text-xs font-bold">
@@ -298,7 +298,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ presetRole }) => {
         {/* TEACHER LOGIN & ACTIVATION FORM */}
         {activeRole === 'TEACHER' && (
           <div className="bg-[#0B1B33]/90 backdrop-blur-xl p-6 sm:p-8 rounded-3xl border border-slate-700/80 shadow-2xl space-y-5">
-            <div className="flex gap-2 p-1 bg-[#071325] rounded-xl text-xs font-bold">
+            {/* <div className="flex gap-2 p-1 bg-[#071325] rounded-xl text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setTeacherTab('signin')}
@@ -313,7 +313,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ presetRole }) => {
               >
                 Activate Account
               </button>
-            </div>
+            </div> */}
 
             <form onSubmit={handleTeacherSubmit} className="space-y-4">
               {teacherTab === 'activate' && (
@@ -426,10 +426,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ presetRole }) => {
         {/* ADMIN LOGIN FORM (Requirement #4 & #6) */}
         {activeRole === 'ADMIN' && (
           <div className="bg-[#0B1B33]/90 backdrop-blur-xl p-6 sm:p-8 rounded-3xl border border-purple-500/40 shadow-2xl space-y-5">
-            <div className="flex items-center gap-2 text-xs text-purple-300 font-bold bg-purple-500/10 p-3 rounded-xl border border-purple-500/20">
+            {/* <div className="flex items-center gap-2 text-xs text-purple-300 font-bold bg-purple-500/10 p-3 rounded-xl border border-purple-500/20">
               <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
               <span>Privileged Administrator Security Gateway</span>
-            </div>
+            </div> */}
 
             <form onSubmit={handleAdminSubmit} className="space-y-4">
               <div>
@@ -504,11 +504,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ presetRole }) => {
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              <div className="pt-3 border-t border-slate-800/80 text-center">
+              {/* <div className="pt-3 border-t border-slate-800/80 text-center">
                 <Link to="/admin/register" className="text-xs text-slate-400 hover:text-purple-300 font-extrabold hover:underline">
-                  Need a new account? Register / Sign Up Here →
+                  Need a new account? Register 
                 </Link>
-              </div>
+              </div> */}
             </form>
           </div>
         )}
