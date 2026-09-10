@@ -1,30 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Star, 
-  Users, 
-  BookOpen, 
-  Clock, 
-  CheckCircle2, 
-  Play, 
-  ShieldCheck, 
-  Award, 
-  ShoppingCart,
-  ChevronDown,
-  Sparkles,
-  Download,
-  ArrowRight,
-  ArrowLeft,
-  Smartphone,
-  Lock,
-  MessageSquare,
-  Send,
-  AlertTriangle,
-  ThumbsUp,
-  X,
-  Flag
-} from 'lucide-react';
+import { Star, Users, BookOpen, Clock, CheckCircle2, Play, ShieldCheck, Award, ShoppingCart,ChevronDown,Sparkles,Download,ArrowRight,ArrowLeft,Smartphone, Lock,MessageSquare,Send,AlertTriangle,ThumbsUp,X, Flag} from 'lucide-react';
 import { DBService } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { Course, ReportReason } from '../../types/platform';

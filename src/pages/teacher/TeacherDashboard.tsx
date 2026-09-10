@@ -2,28 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { DBService } from '../../services/db';
 import { Course, Lesson, PdfResource, WebsiteContentItem } from '../../types/platform';
-import { 
-  GraduationCap, 
-  BookOpen, 
-  Users, 
-  FileText, 
-  Plus, 
-  LogOut, 
-  CheckCircle2, 
-  Clock, 
-  Sparkles,
-  Play,
-  Edit3,
-  Trash2,
-  FileCode,
-  FileDown,
-  Eye,
-  EyeOff,
-  Video,
-  X,
-  Upload,
-  Globe
-} from 'lucide-react';
+import { GraduationCap, BookOpen, Users, FileText, Plus, LogOut, CheckCircle2, Clock, Sparkles,Play,Edit3,Trash2,FileCode,FileDown, Eye,EyeOff,Video,X,Upload,Globe} from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export const TeacherDashboard: React.FC = () => {

@@ -26,7 +26,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
   // Not logged in
   if (!isAuthenticated || !currentUser) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/register" state={{ from: location }} replace />;
   }
 
   // Role check if allowedRoles is specified

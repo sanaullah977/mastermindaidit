@@ -1,19 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Search, 
-  Sparkles, 
-  Star, 
-  Users, 
-  BookOpen, 
-  Clock, 
-  ShoppingCart, 
-  Check, 
-  RotateCcw,
-  SlidersHorizontal,
-  X
-} from 'lucide-react';
+import { Search, Sparkles, Star, Users, BookOpen, Clock, ShoppingCart, Check, RotateCcw,SlidersHorizontal,X} from 'lucide-react';
 import { DBService } from '../../services/db';
 import { Course } from '../../types/platform';
 import { Footer } from '../../components/layout/Footer';

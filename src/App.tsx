@@ -12,7 +12,6 @@ import { AppRoutes } from './routes/AppRoutes';
 import { SearchModal } from './components/shared/SearchModal';
 import { CartDrawer } from './components/cart/CartDrawer';
 import { PathFinderModal } from './components/shared/PathFinderModal';
-import { FloatingAssistant } from './components/ai/FloatingAssistant';
 
 import { Course } from './types/platform';
 import { DBService } from './services/db';
@@ -131,8 +130,6 @@ export function App() {
         onSelectRecommendedCourse={(course: any) => navigate(`/courses/${course.id}`)}
       />
 
-      {/* Live AI Floating Assistant Support */}
-      <FloatingAssistant />
 
     </div>
   );
